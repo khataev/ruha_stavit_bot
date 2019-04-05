@@ -2,16 +2,21 @@ const requestGlobal = require('request');
 const express = require('express');
 const bodyParser = require('body-parser');
 
+// local files
 const constants = require('./modules/constants');
 const logger = require('./modules/logger');
 const settings = require('./modules/config');
+const telegram = require('./modules/telegram');
+const util = require('./modules/util');
 const packageInfo = require('./package.json');
 
+const telegramApi = new telegram(settings, logger, true);
+
 function start_express_server() {
-  if (settings.get('env') === 'production') {
+  if (settings.get('env') === 'development') {
     logger.warn('start_express_server');
     let app = express(),
-      token = settings.get('credentials.bot.api_token');
+      token = settings.get('credentials.telegram_bot.api_token');
 
     //Here we are configuring express to use body-parser as middle-ware.
     app.use(bodyParser.urlencoded({ extended: false }));
@@ -21,11 +26,15 @@ function start_express_server() {
       res.json({ version: packageInfo.version });
     });
 
-    // app.post(`/${token}`, function (req, res) {
-    //   handleSeizeButton(req, res);
-    // });
+    logger.log(`token: ${token}`);
+    app.post(`/${token}`, function (req, res) {
+      logger.log(req.body);
+      res.json({ result: `ruha bot handler!` });
+    });
 
-    let server = app.listen(process.env.PORT, function () {
+    let port = settings.isProductionEnv() ? process.env.PORT : 8000;
+
+    let server = app.listen(port, function () {
       let host = server.address().address;
       let port = server.address().port;
 
@@ -37,6 +46,7 @@ function start_express_server() {
 function run() {
   if (settings) {
     start_express_server();
+    // start_simple_server();
 
     logger.fatal(`started with '${logger.currentLogLevel()}' log level`);
 
