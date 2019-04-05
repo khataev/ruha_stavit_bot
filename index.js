@@ -13,7 +13,8 @@ const packageInfo = require('./package.json');
 const telegramApi = new telegram(settings, logger, true);
 
 function start_express_server() {
-  if (settings.get('env') === 'production') {
+  // if (settings.get('env') === 'production') {
+  if (settings.get('env')) {
     logger.warn('start_express_server');
     let app = express(),
       token = settings.get('credentials.telegram_bot.api_token');
@@ -26,10 +27,10 @@ function start_express_server() {
       res.json({ version: packageInfo.version });
     });
 
-    logger.log(`token: ${token}`);
     app.post(`/${token}`, function (req, res) {
       logger.log(req.body);
-      res.json({ result: `ruha bot handler!` });
+      telegramApi.processUpdate(req.body);
+      res.sendStatus(200);
     });
 
     let port = settings.isProductionEnv() ? process.env.PORT : 8000;

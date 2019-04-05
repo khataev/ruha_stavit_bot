@@ -19,7 +19,10 @@ let telegram = function(settings, logger, set_webhooks = false) {
     application_name = settings.get('application_name'),
     is_production_env = settings.isProductionEnv();
 
-  bot_today = new Bot(today_token, { polling: false });
+  // bot_today = new Bot(today_token, { polling: false });
+
+  bot_today = new Bot(today_token);
+
   bot_today.id = 'bot_today';
   sent_message_log_length = settings.get('debug.sent_message_log_length');
 
@@ -32,6 +35,7 @@ let telegram = function(settings, logger, set_webhooks = false) {
       .setWebHook(`https://${application_name}.herokuapp.com/${today_token}`)
       .then(() => logger.warn('Setting bot webhook - DONE'))
       .then(() => logger.warn('Telegram webhooks initialization passed'))
+      .then(() => this.setCommands())
       .catch(error => logger.error(error.message));
   }
   if (!application_name)
@@ -51,6 +55,10 @@ let telegram = function(settings, logger, set_webhooks = false) {
       bot_today.sendMessage(chatId, resp);
     });
 
+    bot_today.on('message', msg => {
+      bot_today.sendMessage(msg.chat.id, 'I am alive!');
+    });
+
   };
 
   this.mapGetUpdatesElement = function (elem) {
@@ -66,6 +74,10 @@ let telegram = function(settings, logger, set_webhooks = false) {
   //     answerCallbackQueryTomorrow(query_id, text);
   //   }
   // };
+
+  this.processUpdate = function(message){
+    bot_today.processUpdate(message);
+  };
 
   // TODO
   this.getChatIds = function (){
