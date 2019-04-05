@@ -13,7 +13,7 @@ const packageInfo = require('./package.json');
 const telegramApi = new telegram(settings, logger, true);
 
 function start_express_server() {
-  if (settings.get('env') === 'development') {
+  if (settings.get('env') === 'production') {
     logger.warn('start_express_server');
     let app = express(),
       token = settings.get('credentials.telegram_bot.api_token');
