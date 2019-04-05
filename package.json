@@ -1,0 +1,25 @@
+{
+  "name": "ruha_stavit_bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
+  },
+  "author": "Andrey Khataev (khataev@yandex.ru)",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.18.3",
+    "cheerio": "^1.0.0-rc.2",
+    "convict": "^4.4.0",
+    "express": "^4.16.4",
+    "luxon": "^1.4.4",
+    "newrelic": "^4.12.0",
+    "node-telegram-bot-api": "^0.30.0",
+    "pg": "^7.6.1",
+    "request": "^2.88.0",
+    "sequelize": "^4.41.1",
+    "sequelize-cli": "^5.3.0"
+  }
+}
