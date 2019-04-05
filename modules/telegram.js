@@ -42,6 +42,7 @@ let telegram = function(settings, logger, set_webhooks = false) {
     logger.error('Параметр application_name не установлен');
 
   this.setCommands = function () {
+    let parent = this;
     // Matches "/echo [whatever]"
     bot_today.onText(/\/start (.+)/, (msg, match) => {
       // 'msg' is the received Message from Telegram
@@ -49,16 +50,43 @@ let telegram = function(settings, logger, set_webhooks = false) {
       // of the message
 
       const chatId = msg.chat.id;
-      const resp = match[1]; // the captured "whatever"
+      bot_today.sendMessage(chatId, 'on start');
+      bot_today.sendMessage(chatId, this.startInstructions()[0])
+        .then(() => bot_today.sendMessage(chatId, this.startInstructions()[1]))
+        .catch(error => logger.error(error.message));
 
-      // send back the matched "whatever" to the chat
-      bot_today.sendMessage(chatId, resp);
+      // // const resp = match[1]; // the captured "whatever"
+      // // send back the matched "whatever" to the chat
+      // await util.asyncForEach(this.startInstructions(), async (i, instruction) => {
+      //   logger.log(instruction);
+      //   bot_today.sendMessage(chatId, instruction);
+      //   await util.sleep(parent.getDelayBetweenRequests());
+      // })
     });
 
     bot_today.on('message', msg => {
-      bot_today.sendMessage(msg.chat.id, 'I am alive!');
+      bot_today.sendMessage(msg.chat.id, '⚙️Если у вас возникли трудности с оплатой, обратитесь в нашу тех-поддержку @ruha_stavit_manager и мы вам поможем');
     });
 
+  };
+
+  this.startInstructions = function() {
+    return [
+      'https://www.youtube.com/watch?v=olztRgAZmDA&t=6s',
+      '🔥 Litvin Stavit\n' +
+      'Месячная подписка \n' +
+      'После оплаты у тебя будет:\n' +
+      '\n' +
+      '1⃣ Личный кабинет в телеграм-боте с обучением по ставкам. (Как ставить? Где ставить? Доп. техники. И тд)\n' +
+      '2⃣ 130-150 прогнозов в месяц со средней доходностью 280% в месяц. 4-6 ставок в день с проходимостью 85% \n' +
+      '3⃣ Полное сопровождение по всем ставкам + помощь по любым вопросам в течении всего месяца\n' +
+      '4⃣ Дополнительный бонус от Litvin Stavit после оплаты\n' +
+      '\n' +
+      '✅ В среднем вложенные деньги отбиваются за 3 дня\n' +
+      '\n' +
+      '💳 Стоимость: 3500 рублей\n' +
+      '⬇️Если готов начать, Жми'
+    ];
   };
 
   this.mapGetUpdatesElement = function (elem) {

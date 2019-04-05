@@ -61,4 +61,24 @@ function run() {
   }
 }
 
+async function testCommands() {
+  // 'msg' is the received Message from Telegram
+  // 'match' is the result of executing the regexp above on the text content
+  // of the message
+  // const resp = match[1]; // the captured "whatever"
+  // send back the matched "whatever" to the chat
+  await util.asyncForEach(telegramApi.startInstructions(), async (i, instruction) => {
+    logger.log(instruction);
+    await util.sleep(telegramApi.getDelayBetweenRequests());
+  })
+}
+
+function run_test() {
+  if (settings) {
+    testCommands();
+  }
+}
+
 run();
+
+// run_test();
