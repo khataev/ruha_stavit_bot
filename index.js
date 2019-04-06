@@ -28,8 +28,26 @@ function start_express_server() {
     });
 
     app.post(`/${token}`, function (req, res) {
-      logger.log(req.body);
+      logger.debug(req.body);
       telegramApi.processUpdate(req.body);
+      res.sendStatus(200);
+    });
+
+    app.post(`/${token}/handler`, function (req, res) {
+      logger.debug('handler action');
+      logger.debug(req.body);
+      res.sendStatus(200);
+    });
+
+    app.post(`/${token}/success`, function (req, res) {
+      logger.debug('success action');
+      logger.debug(req.body);
+      res.sendStatus(200);
+    });
+
+    app.post(`/${token}/failure`, function (req, res) {
+      logger.debug('failure action');
+      logger.debug(req.body);
       res.sendStatus(200);
     });
 
