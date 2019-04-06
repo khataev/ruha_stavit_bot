@@ -1,9 +1,11 @@
-const request = require('request');
+// const request = require('request');
 const util = require('./util');
+const CACHE = require('./cache');
+const wizard = require('./wizard');
 
 const Bot = require('node-telegram-bot-api');
 
-let bot_today, sent_message_log_length;
+let bot_today, sent_message_log_length, wizardApi;
 
 function cropSentMessage(message) {
   return `${message.substr(0, sent_message_log_length)}...`;
@@ -19,61 +21,12 @@ let telegram = function(settings, logger, set_webhooks = false) {
     application_name = settings.get('application_name'),
     is_production_env = settings.isProductionEnv();
 
-  // bot_today = new Bot(today_token, { polling: false });
-
-  bot_today = new Bot(today_token);
-
-  bot_today.id = 'bot_today';
-  sent_message_log_length = settings.get('debug.sent_message_log_length');
-
-  if (application_name && is_production_env && set_webhooks) {
-    // TODO: move webhooks initialization to explicit routine to be run consequently
-    // before login
-    const parent = this;
-    logger.warn('Setting bot webhook');
-    bot_today
-      .setWebHook(`https://${application_name}.herokuapp.com/${today_token}`)
-      .then(() => logger.warn('Setting bot webhook - DONE'))
-      .then(() => logger.warn('Telegram webhooks initialization passed'))
-      .then(() => this.setCommands())
-      .catch(error => logger.error(error.message));
-  }
-  if (!application_name)
-    logger.error('Параметр application_name не установлен');
-
-  this.setCommands = function () {
-    let parent = this;
-    // Matches "/echo [whatever]"
-    bot_today.onText(/\/start (.+)/, (msg, match) => {
-      // 'msg' is the received Message from Telegram
-      // 'match' is the result of executing the regexp above on the text content
-      // of the message
-
-      const chatId = msg.chat.id;
-      bot_today.sendMessage(chatId, 'on start');
-      bot_today.sendMessage(chatId, this.startInstructions()[0])
-        .then(() => bot_today.sendMessage(chatId, this.startInstructions()[1]))
-        .catch(error => logger.error(error.message));
-
-      // // const resp = match[1]; // the captured "whatever"
-      // // send back the matched "whatever" to the chat
-      // await util.asyncForEach(this.startInstructions(), async (i, instruction) => {
-      //   logger.log(instruction);
-      //   bot_today.sendMessage(chatId, instruction);
-      //   await util.sleep(parent.getDelayBetweenRequests());
-      // })
-    });
-
-    bot_today.on('message', msg => {
-      bot_today.sendMessage(msg.chat.id, '⚙️Если у вас возникли трудности с оплатой, обратитесь в нашу тех-поддержку @ruha_stavit_manager и мы вам поможем');
-    });
-
-  };
-
+  // TODO: module for content
   this.startInstructions = function() {
     return [
-      'https://www.youtube.com/watch?v=olztRgAZmDA&t=6s',
-      '🔥 Litvin Stavit\n' +
+      ['https://www.youtube.com/watch?v=olztRgAZmDA&t=6s', {}],
+
+      ['🔥 Litvin Stavit\n' +
       'Месячная подписка \n' +
       'После оплаты у тебя будет:\n' +
       '\n' +
@@ -85,9 +38,157 @@ let telegram = function(settings, logger, set_webhooks = false) {
       '✅ В среднем вложенные деньги отбиваются за 3 дня\n' +
       '\n' +
       '💳 Стоимость: 3500 рублей\n' +
-      '⬇️Если готов начать, Жми'
+      '⬇️Если готов начать, Жми',
+        {
+          "reply_markup": {
+            "inline_keyboard": [
+              [{ "text": 'Оплатить подписку', "callback_data": 'pay_subscription' }],
+              [{ "text": 'Переход на сайт', "url": 'https://ya.ru' }]
+            ]
+          }
+        }
+      ],
+      [
+        '!!!',
+        {
+          "reply_markup": {
+            "keyboard": [
+              ['ОПЛАТИТЬ ПОДПИСКУ'],
+              ['ОСТАЛИСЬ ВОПРОСЫ']
+            ],
+            "resize_keyboard": true
+          }
+        }
+      ]
     ];
   };
+
+  // this.initialInstructionsHandler = async function(msg, match) {
+  //   const chatId = msg.chat.id;
+  //   parent = this;
+  //   await util.asyncForEach(startInstructions(), async (i, instruction) => {
+  //     await bot_today.sendMessage(chatId, instruction[0], instruction[1]);
+  //     await util.sleep(parent.getDelayBetweenRequests());
+  //   })
+  // };
+
+  this.setCommands = function () {
+    let parent = this;
+
+    // bot_today.onText(/\/start/, (msg, match) => {
+    //   const chatId = msg.chat.id;
+    //   // bot_today.sendMessage(chatId, 'Приветствую');
+    //
+    //   bot_today.sendMessage(chatId, this.startInstructions()[0][0], )
+    //     .then(() => bot_today.sendMessage(chatId, this.startInstructions()[1]))
+    //     .catch(error => logger.error(error.message));
+    // });
+
+    bot_today.onText(/\/start|\/info/, async (msg, match) => {
+      const chatId = msg.chat.id;
+
+      await util.asyncForEach(this.startInstructions(), async (i, instruction) => {
+        await bot_today.sendMessage(chatId, instruction[0], instruction[1]);
+        await util.sleep(parent.getDelayBetweenRequests());
+      })
+    });
+
+    // bot_today.onText(/\/start|\/info/, this.initialInstructionsHandler);
+
+    bot_today.onText(/ОПЛАТИТЬ ПОДПИСКУ/, async (msg, match) => {
+      const chatId = msg.chat.id;
+
+      wizardApi.startPayWizard(chatId);
+      wizardApi.handlePayWizardStep(chatId);
+    });
+
+    bot_today.onText(/ОСТАЛИСЬ ВОПРОСЫ/, async (msg, match) => {
+      const chatId = msg.chat.id;
+
+      wizardApi.stopPayWizard(chatId);
+
+      bot_today.sendMessage(
+        chatId,
+        '⬇️ Нажмите на интересующий вопрос, и вы тут же получите ответ',
+        {
+          "reply_markup": {
+            "inline_keyboard": [
+              [{ "text": 'Соцсети проекта', "callback_data": 'social_pages' }],
+              [{ "text": 'Бесплатный канал', "callback_data": 'free_channel' }],
+              [{ "text": 'Сайт проекта', "callback_data": 'web_page' }],
+              [{ "text": 'Пользовательское соглашение', "callback_data": 'user_terms' }],
+              [{ "text": 'Проблема с оплатой', "callback_data": 'payment_problems' }],
+              [{ "text": 'Задать свой вопрос', "callback_data": 'other_question' }],
+            ]
+          }
+        });
+    });
+
+    bot_today.on('message', msg => {
+      logger.debug(`incoming message: ${msg.text}`);
+
+      let chat_id = msg.chat.id;
+      if (msg.text.search(/\/info|\/start/) >= 0)
+        return;
+
+      if (msg.text.search(/ОПЛАТИТЬ ПОДПИСКУ|ОСТАЛИСЬ ВОПРОСЫ/) >= 0)
+        return;
+
+      if (wizardApi.payWizardStarted(chat_id)) {
+        let wizard = wizardApi.getPayWizard(chat_id);
+        wizardApi.handlePayWizardStep(chat_id, msg.text);
+      }
+      else {
+        bot_today.sendMessage(msg.chat.id, '⚙️Если у вас возникли трудности с оплатой, обратитесь в нашу тех-поддержку @ruha_stavit_manager и мы вам поможем');
+      }
+    });
+
+    bot_today.on('callback_query', msg => {
+      // console.log('callback message', msg);
+      let chat_id = msg.message.chat.id;
+
+      if(msg.data == 'pay_subscription') {
+        wizardApi.startPayWizard(chat_id);
+        wizardApi.handlePayWizardStep(chat_id);
+      }
+    });
+
+    bot_today.on('polling_error', (error) => {
+      console.log(error);  // => 'EFATAL'
+    });
+  };
+
+  // bot_today = new Bot(today_token, { polling: false });
+
+  if (is_production_env) {
+    bot_today = new Bot(today_token);
+  }
+  else {
+    bot_today = new Bot(today_token, { polling: true });
+  }
+  bot_today.id = 'bot_today';
+  wizardApi = new wizard(CACHE, bot_today);
+  sent_message_log_length = settings.get('debug.sent_message_log_length');
+
+  if (application_name && set_webhooks) {
+    if (is_production_env) {
+      // TODO: move webhooks initialization to explicit routine to be run consequently
+      // before login
+      const parent = this;
+      logger.warn('Setting bot webhook');
+      bot_today
+        .setWebHook(`https://${application_name}.herokuapp.com/${today_token}`)
+        .then(() => logger.warn('Setting bot webhook - DONE'))
+        .then(() => logger.warn('Telegram webhooks initialization passed'))
+        .then(() => this.setCommands())
+        .catch(error => logger.error(error.message));
+    }
+    else {
+      this.setCommands();
+    }
+  }
+  if (!application_name)
+    logger.error('Параметр application_name не установлен');
 
   this.mapGetUpdatesElement = function (elem) {
     logger.debug('mapGetUpdatesElement', elem);
