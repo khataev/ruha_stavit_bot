@@ -66,6 +66,12 @@ const config = convict({
         default: "",
         env: "CREDENTIALS_TELEGRAM_BOT_API_TOKEN"
       },
+      api_tokens: {
+        doc: "List of tokens",
+        format: Array,
+        default: [],
+        env: "CREDENTIALS_TELEGRAM_BOT_API_TOKENS"
+      },
       chat_ids: {
         doc: "List of internal chat ids of bot recipients",
         format: Array,

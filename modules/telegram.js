@@ -7,6 +7,8 @@ const Bot = require('node-telegram-bot-api');
 
 let bot_today, sent_message_log_length, wizardApi;
 
+let bots = {};
+
 function cropSentMessage(message) {
   return `${message.substr(0, sent_message_log_length)}...`;
 }
@@ -17,6 +19,7 @@ function cropSentMessage(message) {
 
 let telegram = function(settings, logger, set_webhooks = false) {
   let today_token = settings.get('credentials.telegram_bot.api_token'),
+    api_tokens = settings.get('credentials.telegram_bot.api_tokens'),
     message_prepender = settings.get('debug.message_prepender'),
     application_name = settings.get('application_name'),
     is_production_env = settings.isProductionEnv();
@@ -72,42 +75,33 @@ let telegram = function(settings, logger, set_webhooks = false) {
   //   })
   // };
 
-  this.setCommands = function () {
+  this.setCommands = function (bot) {
     let parent = this;
 
-    // bot_today.onText(/\/start/, (msg, match) => {
-    //   const chatId = msg.chat.id;
-    //   // bot_today.sendMessage(chatId, 'Приветствую');
-    //
-    //   bot_today.sendMessage(chatId, this.startInstructions()[0][0], )
-    //     .then(() => bot_today.sendMessage(chatId, this.startInstructions()[1]))
-    //     .catch(error => logger.error(error.message));
-    // });
-
-    bot_today.onText(/\/start|\/info/, async (msg, match) => {
+    bot.onText(/\/start|\/info/, async (msg, match) => {
       const chatId = msg.chat.id;
 
       await util.asyncForEach(this.startInstructions(), async (i, instruction) => {
-        await bot_today.sendMessage(chatId, instruction[0], instruction[1]);
+        await bot.sendMessage(chatId, instruction[0], instruction[1]);
         await util.sleep(parent.getDelayBetweenRequests());
       })
     });
 
     // bot_today.onText(/\/start|\/info/, this.initialInstructionsHandler);
 
-    bot_today.onText(/ОПЛАТИТЬ ПОДПИСКУ/, async (msg, match) => {
+    bot.onText(/ОПЛАТИТЬ ПОДПИСКУ/, async (msg, match) => {
       const chatId = msg.chat.id;
 
-      wizardApi.startPayWizard(chatId);
-      wizardApi.handlePayWizardStep(chatId);
+      wizardApi.startPayWizard(chatId, bot.token);
+      wizardApi.handlePayWizardStep(chatId, bot.token);
     });
 
-    bot_today.onText(/ОСТАЛИСЬ ВОПРОСЫ/, async (msg, match) => {
+    bot.onText(/ОСТАЛИСЬ ВОПРОСЫ/, async (msg, match) => {
       const chatId = msg.chat.id;
 
-      wizardApi.stopPayWizard(chatId);
+      wizardApi.stopPayWizard(chatId, bot.token);
 
-      bot_today.sendMessage(
+      bot.sendMessage(
         chatId,
         '⬇️ Нажмите на интересующий вопрос, и вы тут же получите ответ',
         {
@@ -124,7 +118,7 @@ let telegram = function(settings, logger, set_webhooks = false) {
         });
     });
 
-    bot_today.on('message', msg => {
+    bot.on('message', msg => {
       logger.debug(`incoming message: ${msg.text}`);
 
       let chat_id = msg.chat.id;
@@ -135,39 +129,44 @@ let telegram = function(settings, logger, set_webhooks = false) {
         return;
 
       if (wizardApi.payWizardStarted(chat_id)) {
-        let wizard = wizardApi.getPayWizard(chat_id);
-        wizardApi.handlePayWizardStep(chat_id, msg.text);
+        let wizard = wizardApi.getPayWizard(chat_id, bot.token);
+        wizardApi.handlePayWizardStep(chat_id, bot.token, msg.text);
       }
       else {
-        bot_today.sendMessage(msg.chat.id, '⚙️Если у вас возникли трудности с оплатой, обратитесь в нашу тех-поддержку @ruha_stavit_manager и мы вам поможем');
+        bot.sendMessage(msg.chat.id, '⚙️Если у вас возникли трудности с оплатой, обратитесь в нашу тех-поддержку @ruha_stavit_manager и мы вам поможем');
       }
     });
 
-    bot_today.on('callback_query', msg => {
+    bot.on('callback_query', msg => {
       // console.log('callback message', msg);
       let chat_id = msg.message.chat.id;
 
       if(msg.data == 'pay_subscription') {
-        wizardApi.startPayWizard(chat_id);
-        wizardApi.handlePayWizardStep(chat_id);
+        wizardApi.startPayWizard(chat_id, bot.token);
+        wizardApi.handlePayWizardStep(chat_id, bot.token);
       }
     });
 
-    bot_today.on('polling_error', (error) => {
+    bot.on('polling_error', (error) => {
       console.log(error);  // => 'EFATAL'
     });
   };
 
   // bot_today = new Bot(today_token, { polling: false });
 
-  if (is_production_env) {
-    bot_today = new Bot(today_token);
-  }
-  else {
-    bot_today = new Bot(today_token, { polling: true });
-  }
-  bot_today.id = 'bot_today';
-  wizardApi = new wizard(CACHE, bot_today);
+  api_tokens.forEach(token => {
+    if (is_production_env) {
+      // bot_today = new Bot(today_token);
+      bots[token] = new Bot(token);
+    }
+    else {
+      // bot_today = new Bot(today_token, { polling: true });
+      bots[token] = new Bot(token, { polling: true })
+    }
+    bots[token].token = token;
+  });
+
+  wizardApi = new wizard(CACHE, bots);
   sent_message_log_length = settings.get('debug.sent_message_log_length');
 
   if (application_name && set_webhooks) {
@@ -175,16 +174,23 @@ let telegram = function(settings, logger, set_webhooks = false) {
       // TODO: move webhooks initialization to explicit routine to be run consequently
       // before login
       const parent = this;
-      logger.warn('Setting bot webhook');
-      bot_today
-        .setWebHook(`https://${application_name}.herokuapp.com/${today_token}`)
-        .then(() => logger.warn('Setting bot webhook - DONE'))
-        .then(() => logger.warn('Telegram webhooks initialization passed'))
-        .then(() => this.setCommands())
-        .catch(error => logger.error(error.message));
+      api_tokens.forEach(token => {
+        logger.warn(`Setting bot webhook, token: ${token}`);
+        let bot = bots[token];
+        bot
+          .setWebHook(`https://${application_name}.herokuapp.com/${token}`)
+          .then(() => logger.warn('Setting bot webhook - DONE'))
+          .then(() => logger.warn('Telegram webhooks initialization passed'))
+          .then(() => this.setCommands(bot))
+          .catch(error => logger.error(error.message));
+      });
+
     }
     else {
-      this.setCommands();
+      api_tokens.forEach(token => {
+        let bot = bots[token];
+        this.setCommands(bot);
+      });
     }
   }
   if (!application_name)
@@ -204,8 +210,9 @@ let telegram = function(settings, logger, set_webhooks = false) {
   //   }
   // };
 
-  this.processUpdate = function(message){
-    bot_today.processUpdate(message);
+  this.processUpdate = function(message, token){
+    // bot_today.processUpdate(message);
+    bots[token].processUpdate(message);
   };
 
   // TODO
@@ -216,7 +223,7 @@ let telegram = function(settings, logger, set_webhooks = false) {
   };
 
   // TODO: rollback save to history if send failed
-  this.sendMessageToSubscriber = function (chat_id, text, reply_markup_options) {
+  this.sendMessageToSubscriber = function (chat_id, text, reply_markup_options, token) {
     let sanitized_chat_id = parseInt(chat_id, 10);
     if (isNaN(sanitized_chat_id)) {
       logger.error('chat_id is empty');
@@ -224,9 +231,10 @@ let telegram = function(settings, logger, set_webhooks = false) {
     let sanitized_text = util.sanitizeText(`${message_prepender}${text}`.trim());
     // let delay = this.getDelayBetweenRequests();
     // let url = `https://api.telegram.org/bot${api_token}/sendMessage?chat_id=${chat_id}&text=${encoded_text}`;
-    logger.info(`sendMessageToSubscriber. chat_id: ${sanitized_chat_id}, text: ${sanitized_text}`);
+    logger.info(`sendMessageToSubscriber. chat_id: ${sanitized_chat_id}, text: ${sanitized_text}, token: ${token}`);
 
-    return bot_today
+    // return bot_today
+    return bots[token]
       .sendMessage(sanitized_chat_id, sanitized_text, reply_markup_options)
       .then(message => {
         logger.warn(
@@ -251,11 +259,11 @@ let telegram = function(settings, logger, set_webhooks = false) {
     return bot.editMessageReplyMarkup(reply_markup, options);
   };
 
-  this.editSubscriberMessage = function (chat_id, message_id, reply_markup_options) {
-    return this.editSubscriberMessageForBot(chat_id, message_id, reply_markup_options, bot_today);
-  };
+  // this.editSubscriberMessage = function (chat_id, message_id, reply_markup_options) {
+  //   return this.editSubscriberMessageForBot(chat_id, message_id, reply_markup_options, bot_today);
+  // };
 
-  this.sendToTelegram = async function (text, reply_markup_options) {
+  this.sendToTelegram = async function (text, reply_markup_options, token) {
     let chat_ids = this.getChatIds();
     let sent_messages = {};
     if (chat_ids && chat_ids.length > 0) {
@@ -264,7 +272,7 @@ let telegram = function(settings, logger, set_webhooks = false) {
       let parent = this;
       await util.asyncForEach(chat_ids, async function (i, chat_id) {
         await parent
-          .sendMessageToSubscriber(chat_id, text, reply_markup_options)
+          .sendMessageToSubscriber(chat_id, text, reply_markup_options, token)
           .then(message => sent_messages[chat_id] = message.message_id);
         await util.sleep(parent.getDelayBetweenRequests());
       });
@@ -293,9 +301,9 @@ let telegram = function(settings, logger, set_webhooks = false) {
     }
   };
 
-  this.editMessagesInTelegram = function (sent_messages, reply_markup) {
-    return this.editMessagesInTelegramForBot(sent_messages, reply_markup, bot_today);
-  };
+  // this.editMessagesInTelegram = function (sent_messages, reply_markup) {
+  //   return this.editMessagesInTelegramForBot(sent_messages, reply_markup, bot_today);
+  // };
 
 
   this.getApiToken = function (settings) {
@@ -324,9 +332,9 @@ let telegram = function(settings, logger, set_webhooks = false) {
       };
   };
 
-  this.getTodayBot = function() {
-    return bot_today;
-  };
+  // this.getTodayBot = function() {
+  //   return bot_today;
+  // };
 };
 
 module.exports = telegram;

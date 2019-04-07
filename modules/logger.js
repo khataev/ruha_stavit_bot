@@ -65,11 +65,16 @@ let logger = function () {
     if (isEqualOrHigherLevel(log_level))
       console.log(DateTime.local().toISO(), `[${acronymizeLevel(log_level)}]`, text);
 
-    log_levels
-      .forEach(level => {
-        if (isEqualOrHigherLevelBase(level, log_level))
-          this.appendToFile(`[${acronymizeLevel(log_level)}] ${text}`, PROTOCOL_FILES[level]);
-      });
+    try {
+      log_levels
+        .forEach(level => {
+          if (isEqualOrHigherLevelBase(level, log_level))
+            this.appendToFile(`[${acronymizeLevel(log_level)}] ${text}`, PROTOCOL_FILES[level]);
+        });
+    } catch (e) {
+      console.log('Произошла ошибка протоколирования', e.message)
+    }
+
   };
 
   this.fatal = function (text) {

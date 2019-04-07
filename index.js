@@ -39,13 +39,13 @@ function start_express_server() {
       res.sendStatus(200);
     });
 
-    app.post(`/${token}/success`, function (req, res) {
+    app.get(`/${token}/success`, function (req, res) {
       logger.debug('success action');
       logger.debug(req.body);
       res.sendStatus(200);
     });
 
-    app.post(`/${token}/failure`, function (req, res) {
+    app.get(`/${token}/failure`, function (req, res) {
       logger.debug('failure action');
       logger.debug(req.body);
       res.sendStatus(200);
